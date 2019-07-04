@@ -6,8 +6,12 @@ import math
 import numpy
 
 score = 0
-
 R = 0
+
+weights = [-1, 1, -1, -1, -1]
+alpha = 0.01
+gamma = 0.9
+epsilon = 0.5
 
 pygame.font.init()
 s_width = 750
@@ -15,7 +19,6 @@ s_height = 650
 play_width = 300
 play_height = 600
 block_size = 30
-random.seed(1337)
 top_left_x = (s_width - play_width) // 2
 top_left_y = (s_height - play_height) / 2
 
@@ -133,16 +136,7 @@ shape_start = {
     "L": [[1, 2, 3, 4, 5, 6, 7, 8], [0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]],
     "T": [[1, 2, 3, 4, 5, 6, 7, 8], [0, 1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8], [1, 2, 3, 4, 5, 6, 7, 8, 9]]
 }
-
-
 next_n_shapes = []
-
-
-
-weights = [-1, 1, -1, -1, -1]
-alpha = 0.01
-gamma = 0.9
-epsilon = 0.5
 
 
 class Node(object):
@@ -170,6 +164,29 @@ class Piece(object):
         self.shape = shape
         self.color = shape_colors[shapes.index(shape)]
         self.rotation = 0  # number from 0-3
+
+def weightsAtIteration(iteration):
+    f = open('weights.txt')
+    savedWeights = []
+    for l in f:
+        lsp = l.split(',')
+        savedWeights.append([])
+        for i in range(len(lsp)):
+            savedWeights[len(savedWeights)-1].append(float(lsp[i]))
+    return savedWeights[iteration]
+
+    
+def initializePiecesFromFile():
+    global next_n_shapes
+    f = open('testcase.txt')
+    for l in f:
+        next_n_shapes = list(map(lambda x: int(x), [char for char in l]))
+
+
+def initializePieces(numOfInitializedPieces):
+    global next_n_shapes,shapes
+    next_n_shapes = list(map(lambda x: x%(len(shapes)), numpy.random.permutation(numOfInitializedPieces).tolist()))
+
 
 
 def create_grid(locked_positions={}):
@@ -223,7 +240,7 @@ def check_lost(positions):
 def get_shape():
     global shapes, shape_colors, next_n_shapes
     if len(next_n_shapes) == 0:
-        next_n_shapes = numpy.random.permutation(7).tolist()
+        next_n_shapes = numpy.random.permutation(len(shapes)).tolist()
     i = next_n_shapes.pop(0)
     return (i, Piece(5, 0, shapes[i]))
 
@@ -233,21 +250,18 @@ def draw_grid(surface, row, col):
     sy = top_left_y
     for i in range(row):
         pygame.draw.line(surface, (128, 128, 128), (sx, sy + i * 30),
-                         (sx + play_width, sy + i * 30))  # horizontal lines
+                         (sx + play_width, sy + i * 30))
         for j in range(col):
             pygame.draw.line(surface, (128, 128, 128), (sx + j * 30, sy),
-                             (sx + j * 30, sy + play_height))  # vertical lines
+                             (sx + j * 30, sy + play_height))
 
 
 def clear_rows(grid, locked):
-    # need to see if row is clear the shift every other row above down one
-    
     inc = 0
     for i in range(len(grid) - 1, -1, -1):
         row = grid[i]
         if (0, 0, 0) not in row:
             inc += 1
-            # add positions to remove from locked
             ind = i
             for j in range(len(row)):
                 try:
@@ -299,19 +313,14 @@ def draw_next_shape(shape, surface):
                 pygame.draw.rect(surface, shape.color, (sx + j * 30, sy + i * 30, 30, 30), 0)
 
     surface.blit(label, (sx - 30, sy - 30))
-    
     surface.blit(label_score, (sx - 30, sy - 120))
     surface.blit(label_r, (sx - 30, sy - 150))
-
-    
-    
     surface.blit(label_weights, (sx - 30, sy + 150))
     surface.blit(label_weights0, (sx - 30, sy + 180))
     surface.blit(label_weights1, (sx - 30, sy + 210))
     surface.blit(label_weights2, (sx - 30, sy + 240))
     surface.blit(label_weights3, (sx - 30, sy + 270))
     surface.blit(label_weights4, (sx - 30, sy + 300))
-
 
 def draw_window(surface):
     surface.fill((0, 0, 0))
@@ -322,8 +331,6 @@ def draw_window(surface):
 
     draw_grid(surface, 20, 10)
     pygame.draw.rect(surface, (255, 0, 0), (top_left_x, top_left_y, play_width, play_height), 5)
-
-
 
 def qlearning(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index, searchFunction):
     global epsilon
@@ -365,16 +372,12 @@ def findMoveAndUpdateWeights(grid, locked_positions, current_piece, current_piec
         child = Node(grid2, current_piece_cpy.x, current_piece_cpy.rotation)
         params_new = child.params
         Q_new = child.heuristic
-
     else:
         x, rot, Q_new, params_new = searchFunction(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index)
 
-    
     Q_old = heuristic(grid)
     params_old = get_params(grid)
     R = 5 * params_new[1]**2 - (params_new[0] - params_old[0])
-
-    
 
     for i in range(0, len(weights)):
         weights[i] = weights[i] + alpha * weights[i] * (R - params_old[i] + gamma * params_new[i])
@@ -390,7 +393,7 @@ def findMoveAndUpdateWeights(grid, locked_positions, current_piece, current_piec
 
 
 
-def bfs(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index, parentNode = None):
+def searchTreeForBestMove(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index, parentNode = None):
     rotacija = 0
     if parentNode is None:
         root = Node(grid, current_piece.x, current_piece.rotation)
@@ -420,7 +423,7 @@ def bfs(grid, locked_positions, current_piece, current_piece_index, next_piece, 
             
             root.addChild(child)
             if parentNode is None:
-                bfs(grid2, locked_positions_cpy, next_piece, next_piece_index, None, 0, child)
+                searchTreeForBestMove(grid2, locked_positions_cpy, next_piece, next_piece_index, None, 0, child)
 
         rotacija += 1
 
@@ -440,7 +443,7 @@ def bfs(grid, locked_positions, current_piece, current_piece_index, next_piece, 
 
         return best.x, best.rotation, maksHeuristic, corresponding_params
 
-def bfs_dumb(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index, parentNode = None):
+def searchTreeForBestMove_dumb(grid, locked_positions, current_piece, current_piece_index, next_piece, next_piece_index, parentNode = None):
     rotacija = 0
     if parentNode is None:
         root = Node(grid, current_piece.x, current_piece.rotation)
@@ -492,7 +495,6 @@ def heuristic(current_grid):
 def get_params(current_grid):
     return aggregate_height(current_grid), complete_lines(current_grid), holes(current_grid), bumpiness(current_grid), max_height(current_grid)
 
-
 def complete_lines(current_grid):
     rows = 0
     for row in current_grid:
@@ -539,7 +541,6 @@ def holes(current_grid):
                 populated_grid[colnum] = True
     return holes
 
-
 def bumpiness(current_grid):
     heights = {}
     columns = range(10)
@@ -573,24 +574,14 @@ def main_menu():
     pygame.quit()
 
 
-def printGrid(grid):
-    global score
-    print('SCORE: ' + str(score))
-    for lista in grid:
-        stringcina = ""
-        for clan in lista:
-            if clan == (0, 0, 0):
-                stringcina += " "
-            else:
-                stringcina += "x"
-        print(stringcina)
-
-def main(searchFunction=bfs):
+def main(searchFunction=searchTreeForBestMove, numOfInitializedPieces=999999):
     global grid
     global weights
-    locked_positions = {}  # (x,y):(255,0,0)
+
+    piecesToDrop = numOfInitializedPieces
+
+    locked_positions = {}
     grid = create_grid(locked_positions)
-    weights = [-0.510066, 0.760666, -0.35663, -0.184483, 0]
     change_piece = False
     run = True
     indeksPiecea, current_piece = get_shape()
@@ -628,18 +619,20 @@ def main(searchFunction=bfs):
 
         # IF PIECE HIT GROUND
         if change_piece:
+            piecesToDrop-=1
+            if(piecesToDrop==0):
+                run=False
+                print(score)
             for pos in shape_pos:
                 p = (pos[0], pos[1])
                 locked_positions[p] = current_piece.color
             current_piece = next_piece
             indeksPiecea = indeksPieceaSledeceg
             indeksPieceaSledeceg, next_piece = get_shape()
-            printGrid(grid)
 
             current_piece.x, current_piece.rotation, maksHeuristic, corresponding_params = searchFunction(grid, locked_positions, current_piece, indeksPiecea, next_piece, indeksPieceaSledeceg)
 
             change_piece = False
-            # call four times to check for multiple clear rows
             clear_rows(grid, locked_positions)
 
         draw_window(win)
@@ -649,21 +642,23 @@ def main(searchFunction=bfs):
         # Check if user lost
         if check_lost(locked_positions):
             run = False
+            if(piecesToDrop != 0):
+                print("Pieces left to drop: " + str(piecesToDrop) + '/' + str(numOfInitializedPieces))
+            print(score)
 
     pygame.display.update()
     pygame.time.delay(2000)
 
-def main_ql(searchFunction=bfs):
+def main_ql(searchFunction=searchTreeForBestMove):
     global weights
     global score
     global grid
     global epsilon
     global R
-    weights = [-1, 1, -20, -1, -1]
-    num_of_iterations = 20
+    num_of_iterations = 25
     while(num_of_iterations > 0):
         score = 0
-        locked_positions = {}  # (x,y):(255,0,0)
+        locked_positions = {}
         grid = create_grid(locked_positions)
 
         change_piece = False
@@ -707,12 +702,9 @@ def main_ql(searchFunction=bfs):
                 current_piece = next_piece
                 indeksPiecea = indeksPieceaSledeceg
                 indeksPieceaSledeceg, next_piece = get_shape()
-                printGrid(grid)
 
                 change_piece = False
-                # call four times to check for multiple clear rows
                 clear_rows(grid, locked_positions)
-                print(weights)
                 current_piece.x, current_piece.rotation = qlearning(grid, locked_positions, current_piece, indeksPiecea, next_piece, indeksPieceaSledeceg, searchFunction)
 
 
@@ -730,7 +722,26 @@ def main_ql(searchFunction=bfs):
     pygame.time.delay(2000)
 
 
+def main_odbrana(algorithm, learn=False, searchFunction=searchTreeForBestMove, atIteration=0, numOfInitializedPieces=0):
+    global weights
+    
+    if algorithm=="Greedy":
+        initializePiecesFromFile()
+        weights = [-0.510066, 0.760666, -0.35663, -0.184483, 0]
+        main(searchFunction, numOfInitializedPieces)
+    elif algorithm=="QLearning":
+        if not learn:
+            initializePiecesFromFile()
+            weights = weightsAtIteration(atIteration)
+            main(searchFunction, numOfInitializedPieces)
+        else:
+            weights = [-1, 1, -20, -1, -1]
+            main_ql(searchFunction)
+    else:
+        print("Unknown algorithm: " + algorithm + ".\nPlease, input 'Greedy' or 'QLearning'")
+
+
 win = pygame.display.set_mode((s_width, s_height))
 pygame.display.set_caption('ORI - SW31/2016')
 
-main(bfs_dumb)  # start gameimport pygame
+main_odbrana("QLearning", False, searchTreeForBestMove_dumb, 10, 100)
